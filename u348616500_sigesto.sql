@@ -1,80 +1,3 @@
--- phpMyAdmin SQL Dump
--- version 5.2.2
--- https://www.phpmyadmin.net/
---
--- Servidor: 127.0.0.1:3306
--- Tiempo de generación: 08-08-2026 a las 23:54:25
--- Versión del servidor: 11.8.8-MariaDB-log
--- Versión de PHP: 7.2.34
-
-SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-START TRANSACTION;
-SET time_zone = "+00:00";
-
-
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8mb4 */;
-
---
--- Base de datos: `u348616500_sigesto`
---
-
-DELIMITER $$
---
--- Procedimientos
---
-CREATE DEFINER=`u348616500_sigesto`@`127.0.0.1` PROCEDURE `sp_recalcular_totales_cotizacion` (IN `p_id_cotizacion` BIGINT UNSIGNED)   BEGIN
-                DECLARE v_subtotal DECIMAL(12,2);
-                DECLARE v_tasa_igv DECIMAL(5,2);
-
-                SELECT IFNULL(SUM(subtotal),0) INTO v_subtotal FROM detalle_cotizacion WHERE id_cotizacion = p_id_cotizacion;
-                SELECT tasa_igv INTO v_tasa_igv FROM cotizaciones WHERE id_cotizacion = p_id_cotizacion;
-
-                UPDATE cotizaciones
-                SET subtotal = v_subtotal, igv = ROUND(v_subtotal * (v_tasa_igv / 100), 2), total = ROUND(v_subtotal * (1 + (v_tasa_igv / 100)), 2)
-                WHERE id_cotizacion = p_id_cotizacion;
-            END$$
-
-CREATE DEFINER=`u348616500_sigesto`@`127.0.0.1` PROCEDURE `sp_verificar_conflicto_coordinacion` (IN `p_id_tecnico` BIGINT UNSIGNED, IN `p_fecha_coordinada` DATE, IN `p_hora_coordinada` TIME, IN `p_uuid_solicitud_excluir` CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci)   BEGIN
-                DECLARE v_conflicto_existe INT DEFAULT 0;
-                DECLARE v_uuid_conflicto CHAR(36);
-                DECLARE v_hora_conflicto TIME;
-                DECLARE v_direccion_conflicto VARCHAR(255);
-
-                SET @hora_inicio = DATE_SUB(p_hora_coordinada, INTERVAL 1 HOUR);
-                SET @hora_fin = DATE_ADD(p_hora_coordinada, INTERVAL 1 HOUR);
-
-                SELECT COUNT(*), MAX(uuid_solicitud), MAX(hora_coordinada), MAX(direccion_servicio)
-                INTO v_conflicto_existe, v_uuid_conflicto, v_hora_conflicto, v_direccion_conflicto
-                FROM solicitudes
-                WHERE id_tecnico = p_id_tecnico
-                    AND fecha_coordinada = p_fecha_coordinada
-                    AND hora_coordinada IS NOT NULL
-                    AND hora_coordinada BETWEEN @hora_inicio AND @hora_fin
-                    AND (p_uuid_solicitud_excluir IS NULL OR uuid_solicitud COLLATE utf8mb4_unicode_ci != p_uuid_solicitud_excluir COLLATE utf8mb4_unicode_ci)
-                    AND estado IN ('ASIGNADA', 'EN_PROCESO', 'COTIZADA', 'REVISION_PAGO', 'APROBADA')
-                    AND deleted_at IS NULL;
-
-                IF v_conflicto_existe > 0 THEN
-                    SELECT 1 AS tiene_conflicto, v_uuid_conflicto AS uuid_solicitud_conflicto,
-                        v_hora_conflicto AS hora_coordinada_conflicto, v_direccion_conflicto AS direccion_conflicto,
-                        CONCAT('El técnico ya tiene una visita coordinada a las ', TIME_FORMAT(v_hora_conflicto, '%H:%i'), ' del mismo día en ', v_direccion_conflicto) AS mensaje_conflicto;
-                ELSE
-                    SELECT 0 AS tiene_conflicto, NULL AS uuid_solicitud_conflicto, NULL AS hora_coordinada_conflicto,
-                        NULL AS direccion_conflicto, 'No hay conflictos de coordinación' AS mensaje_conflicto;
-                END IF;
-            END$$
-
-DELIMITER ;
-
--- --------------------------------------------------------
-
---
--- Estructura de tabla para la tabla `cotizaciones`
---
-
 CREATE TABLE `cotizaciones` (
   `id_cotizacion` bigint(20) UNSIGNED NOT NULL,
   `uuid_solicitud` char(36) NOT NULL,
@@ -89,9 +12,7 @@ CREATE TABLE `cotizaciones` (
   `deleted_at` timestamp NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
---
--- Volcado de datos para la tabla `cotizaciones`
---
+
 
 INSERT INTO `cotizaciones` (`id_cotizacion`, `uuid_solicitud`, `estado`, `tasa_igv`, `subtotal`, `igv`, `total`, `id_usuario_creador`, `created_at`, `updated_at`, `deleted_at`) VALUES
 (1, '019f6c0d-8618-728c-9bfe-d537c0a80b81', 'APROBADA', 18.00, 285.00, 51.30, 336.30, 3, '2026-07-16 17:50:53', '2026-07-16 18:03:47', NULL),
@@ -759,43 +680,6 @@ INSERT INTO `items_catalogo` (`id_item`, `sku_codigo`, `tipo_item`, `nombre`, `d
 -- --------------------------------------------------------
 
 --
--- Estructura de tabla para la tabla `migrations`
---
-
-CREATE TABLE `migrations` (
-  `id` int(10) UNSIGNED NOT NULL,
-  `migration` varchar(255) NOT NULL,
-  `batch` int(11) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Volcado de datos para la tabla `migrations`
---
-
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES
-(1, '2026_06_08_133801_create_personal_access_tokens_table', 1),
-(2, '2026_06_08_140400_create_roles_table', 1),
-(3, '2026_06_08_141022_create_usuarios_table', 1),
-(4, '2026_06_08_141031_create_perfiles_admin_table', 1),
-(5, '2026_06_08_141036_create_perfiles_tecnicos_table', 1),
-(6, '2026_06_08_141042_create_perfiles_clientes_table', 1),
-(7, '2026_06_08_141047_create_items_catalogo_table', 1),
-(8, '2026_06_08_141052_create_solicitudes_table', 1),
-(9, '2026_06_08_141057_create_historial_estados_table', 1),
-(10, '2026_06_08_141102_create_cotizaciones_table', 1),
-(11, '2026_06_08_141111_create_detalle_cotizacion_table', 1),
-(12, '2026_06_08_141116_create_evidencias_table', 1),
-(13, '2026_06_08_141121_create_pagos_table', 1),
-(14, '2026_06_08_141126_create_vistas_y_procedimientos', 1),
-(15, '2026_06_12_052657_create_procedures_and_triggers', 1),
-(16, '2026_07_08_041023_create_tipos_trabajo_table', 1),
-(17, '2026_07_08_041426_create_tipo_trabajo_items_sugeridos_table', 1),
-(18, '2026_07_10_032857_add_ubicacion_to_solicitudes_table', 1),
-(19, '2026_07_17_011251_create_tipo_trabajo_items_feedback_table', 1);
-
--- --------------------------------------------------------
-
---
 -- Estructura de tabla para la tabla `pagos`
 --
 
@@ -944,43 +828,6 @@ INSERT INTO `perfiles_tecnicos` (`id_tecnico`, `id_usuario`, `dni`, `especialida
 
 -- --------------------------------------------------------
 
---
--- Estructura de tabla para la tabla `personal_access_tokens`
---
-
-CREATE TABLE `personal_access_tokens` (
-  `id` bigint(20) UNSIGNED NOT NULL,
-  `tokenable_type` varchar(255) NOT NULL,
-  `tokenable_id` bigint(20) UNSIGNED NOT NULL,
-  `name` text NOT NULL,
-  `token` varchar(64) NOT NULL,
-  `abilities` text DEFAULT NULL,
-  `last_used_at` timestamp NULL DEFAULT NULL,
-  `expires_at` timestamp NULL DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Volcado de datos para la tabla `personal_access_tokens`
---
-
-INSERT INTO `personal_access_tokens` (`id`, `tokenable_type`, `tokenable_id`, `name`, `token`, `abilities`, `last_used_at`, `expires_at`, `created_at`, `updated_at`) VALUES
-(1, 'App\\Models\\Usuario', 3, 'sigesto-app', '869bb54cc792816243bcb91af48ef7ff7b9ba5506ae995a01bfc63fddf64f2ea', '[\"*\"]', '2026-07-31 04:09:36', NULL, '2026-07-31 03:56:40', '2026-07-31 04:09:36'),
-(2, 'App\\Models\\Usuario', 3, 'sigesto-app', '4637f019e613ba11f2cd53e86b5229eb9f0dac1322a5507ad1d67cdca1b22c33', '[\"*\"]', '2026-07-31 14:24:11', NULL, '2026-07-31 04:00:14', '2026-07-31 14:24:11'),
-(4, 'App\\Models\\Usuario', 1, 'sigesto-app', '342b413b4720e88ecea4775103b509c56875384f0a4207ad06c490875a751869', '[\"*\"]', '2026-07-31 14:26:08', NULL, '2026-07-31 14:13:38', '2026-07-31 14:26:08'),
-(5, 'App\\Models\\Usuario', 3, 'sigesto-app', '7a3fd93ec3a9e619ff63322ddf7ddeff33f0d07baa0b0e462d189f3d8508804d', '[\"*\"]', '2026-07-31 15:35:39', NULL, '2026-07-31 14:14:30', '2026-07-31 15:35:39'),
-(7, 'App\\Models\\Usuario', 1, 'sigesto-app', '5b77015cb8c49b06e31fd5470318f0ed5cfed4cd3b49c8dfbad7ce072e9c775a', '[\"*\"]', '2026-07-31 14:41:39', NULL, '2026-07-31 14:26:48', '2026-07-31 14:41:39'),
-(9, 'App\\Models\\Usuario', 2, 'sigesto-app', '963ba1b8d1c00cf4c35ad1922ae72dc1213b6b193ef4441c09234c5b83795dfd', '[\"*\"]', '2026-08-05 13:46:18', NULL, '2026-07-31 14:55:16', '2026-08-05 13:46:18'),
-(10, 'App\\Models\\Usuario', 1, 'sigesto-app', '47362259a27e53081ca8225abba18d1cd1e6a781e156cf43fa431eedd8760642', '[\"*\"]', '2026-07-31 15:49:42', NULL, '2026-07-31 15:08:26', '2026-07-31 15:49:42'),
-(11, 'App\\Models\\Usuario', 8, 'sigesto-app', 'fc39fbe737e48ae2c639242dc1915cfe3f1012f0f42d9ce13d4c15100ebc37f6', '[\"*\"]', '2026-07-31 15:21:25', NULL, '2026-07-31 15:19:56', '2026-07-31 15:21:25'),
-(12, 'App\\Models\\Usuario', 9, 'sigesto-app', '5be77071a91b43dfb8e544d58a639680361d656ab67d018814a668fd003cacbf', '[\"*\"]', '2026-07-31 15:25:14', NULL, '2026-07-31 15:24:33', '2026-07-31 15:25:14'),
-(13, 'App\\Models\\Usuario', 4, 'sigesto-app', '50a58a4d446ba546b3d08c2c8cc3dbf38d4da26eac21775363f8c34f35725dfd', '[\"*\"]', '2026-07-31 15:29:59', NULL, '2026-07-31 15:29:57', '2026-07-31 15:29:59'),
-(14, 'App\\Models\\Usuario', 1, 'sigesto-app', '193435d29a70193ae50630465a2c61cebedf8f895b792794531193a781607cff', '[\"*\"]', '2026-07-31 16:13:47', NULL, '2026-07-31 16:13:16', '2026-07-31 16:13:47');
-
--- --------------------------------------------------------
-
---
 -- Estructura de tabla para la tabla `roles`
 --
 
@@ -1612,7 +1459,3 @@ ALTER TABLE `tipo_trabajo_items_sugeridos`
 ALTER TABLE `usuarios`
   ADD CONSTRAINT `usuarios_id_rol_foreign` FOREIGN KEY (`id_rol`) REFERENCES `roles` (`id_rol`);
 COMMIT;
-
-/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
-/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
