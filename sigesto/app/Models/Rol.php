@@ -20,18 +20,7 @@ class Rol extends Model
 }
 
 /*
-    ],
-    "aliases": [],
-    "minimum-stability": "stable",
-    "stability-flags": {},
-    "prefer-stable": true,
-    "prefer-lowest": false,
-    "platform": {
-        "php": "^8.4"
-    },
-    "platform-dev": {},
-    "plugin-api-version": "2.9.0"
-}
+  merge corrección
 
 
 */
